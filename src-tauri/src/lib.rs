@@ -10,6 +10,9 @@ pub fn run() {
             commands::list_sessions,
             commands::get_session,
             commands::convert_session,
+            commands::get_resume_command,
+            commands::execute_resume_command,
+            commands::resume_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

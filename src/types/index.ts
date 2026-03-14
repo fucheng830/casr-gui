@@ -48,3 +48,19 @@ export interface ConvertResult {
   warnings: string[];
   error?: string;
 }
+
+export interface ResumeCommandResult {
+  command: string;
+  provider: string;
+  session_id: string;
+  requires_terminal: boolean;
+  is_browser_url: boolean;
+  workspace?: string;
+}
+
+export interface ResumeExecResult {
+  success: boolean;
+  command: string;
+  pid?: number;
+  error?: string;
+}

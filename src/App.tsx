@@ -4,7 +4,7 @@ import { ProviderSidebar } from './components/ProviderSidebar';
 import { SessionList } from './components/SessionList';
 import { SessionDetail } from './components/SessionDetail';
 import { useTauri } from './hooks/useTauri';
-import type { ProviderInfo, SessionSummary, SessionDetail as SessionDetailType, ConvertResult } from './types';
+import type { ProviderInfo, SessionSummary, SessionDetail as SessionDetailType, ConvertResult, ResumeExecResult } from './types';
 
 const SESSION_LIST_LIMIT = 100;
 const SESSION_LIST_SORT = 'date';
@@ -12,7 +12,7 @@ const SESSION_CACHE_TTL_MS = 60_000;
 const SESSION_CACHE_MAX_ENTRIES = 24;
 
 function App() {
-  const { getProviders, listSessions, getSession, convertSession } = useTauri();
+  const { getProviders, listSessions, getSession, convertSession, resumeSession } = useTauri();
 
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -149,6 +149,23 @@ function App() {
     [selectedSession, convertSession]
   );
 
+  const handleResume = useCallback(
+    async (sessionId: string): Promise<ResumeExecResult> => {
+      try {
+        const commandResult = await resumeSession(sessionId);
+        return commandResult;
+      } catch (e) {
+        setError(`Resume failed: ${e}`);
+        return {
+          success: false,
+          command: '',
+          error: String(e),
+        };
+      }
+    },
+    [resumeSession]
+  );
+
   const handleProviderSelect = useCallback((slug: string | null) => {
     setSelectedProvider(slug);
     setSelectedSession(null);
@@ -222,6 +239,7 @@ function App() {
               session={selectedSession}
               providers={providers}
               onConvert={handleConvert}
+              onResume={handleResume}
             />
           </>
         )}

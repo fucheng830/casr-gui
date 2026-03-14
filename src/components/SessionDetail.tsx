@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import type { SessionDetail, ProviderInfo, ConvertResult } from '../types';
+import type { SessionDetail, ProviderInfo, ConvertResult, ResumeExecResult } from '../types';
 
 interface SessionDetailProps {
   session: SessionDetail | null;
   providers: ProviderInfo[];
   onConvert: (targetSlug: string) => Promise<ConvertResult | null>;
+  onResume: (sessionId: string) => Promise<ResumeExecResult>;
 }
 
 const ROLE_COLORS: Record<string, string> = {
@@ -18,12 +19,19 @@ export function SessionDetail({
   session,
   providers,
   onConvert,
+  onResume,
 }: SessionDetailProps) {
   const [selectedTarget, setSelectedTarget] = useState<string>('');
   const [converting, setConverting] = useState(false);
   const [result, setResult] = useState<ConvertResult | null>(null);
   const [copiedResume, setCopiedResume] = useState(false);
   const [copiedSessionId, setCopiedSessionId] = useState(false);
+
+  // New resume-related state
+  const [resuming, setResuming] = useState(false);
+  const [resumeResult, setResumeResult] = useState<ResumeExecResult | null>(null);
+  const [copiedResumeCmd, setCopiedResumeCmd] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!session) {
     return (
@@ -34,6 +42,7 @@ export function SessionDetail({
   }
 
   const installedProviders = providers.filter((p) => p.installed);
+  const isClaudeCode = session.provider === 'claude-code';
 
   const handleConvert = async () => {
     if (!selectedTarget) return;
@@ -48,6 +57,7 @@ export function SessionDetail({
   };
 
   const copyResumeCommand = async () => {
+    // For convert result
     if (result?.resume_command) {
       await navigator.clipboard.writeText(result.resume_command);
       setCopiedResume(true);
@@ -63,8 +73,48 @@ export function SessionDetail({
     }
   };
 
+  const handleResume = async () => {
+    if (!session) return;
+    setResuming(true);
+    setResumeResult(null);
+    setError(null);
+    try {
+      const result = await onResume(session.session_id);
+      setResumeResult(result);
+      if (!result.success) {
+        setError(result.error || 'Resume failed');
+      }
+    } catch (e) {
+      setError(`Resume failed: ${e}`);
+    } finally {
+      setResuming(false);
+    }
+  };
+
+  const copyDirectResumeCommand = async () => {
+    const cmd = resumeResult?.command || result?.resume_command || '';
+    if (cmd) {
+      await navigator.clipboard.writeText(cmd);
+      setCopiedResumeCmd(true);
+      setTimeout(() => setCopiedResumeCmd(false), 2000);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Error display */}
+      {error && (
+        <div className="mx-4 mt-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
+          <span className="flex-1">{error}</span>
+          <button
+            onClick={() => setError(null)}
+            className="text-red-200 hover:text-white"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="p-4 border-b border-gray-200 dark:border-gray-700">
         <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-2">
@@ -114,6 +164,100 @@ export function SessionDetail({
         </div>
 
         {/* Convert controls */}
+        <div className="mt-4">
+          {/* Resume Actions */}
+          {isClaudeCode ? (
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                    📌 Resume in Terminal
+                  </p>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                    This will open a new terminal window with this session
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleResume}
+                    disabled={resuming}
+                    className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white rounded-lg transition-colors"
+                  >
+                    {resuming ? 'Starting...' : '🚀 Resume'}
+                  </button>
+                  <button
+                    onClick={copyDirectResumeCommand}
+                    className="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg transition-colors"
+                  >
+                    {copiedResumeCmd ? 'Copied!' : '📋 Copy'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Direct Resume */}
+              <div className="p-3 bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-purple-700 dark:text-purple-300">
+                      📌 Direct Resume (as {session.provider})
+                    </p>
+                    <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                      Resume without converting format
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleResume}
+                      disabled={resuming}
+                      className="px-4 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-300 text-white rounded-lg transition-colors"
+                    >
+                      {resuming ? 'Starting...' : '🚀 Resume'}
+                    </button>
+                    <button
+                      onClick={copyResumeCommand}
+                      className="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg transition-colors"
+                    >
+                      {copiedResumeCmd ? 'Copied!' : '📋 Copy'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Or convert */}
+              <div className="p-3 bg-gray-50 dark:bg-gray-800/30 border border-gray-200 dark:border-gray-700 rounded-lg">
+                <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+                  🔄 Or convert to another provider first:
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Resume execution result feedback */}
+          {resumeResult && (
+            <div
+              className={`mt-3 p-3 rounded-lg ${
+                resumeResult.success
+                  ? 'bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800'
+                  : 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800'
+              }`}
+            >
+              {resumeResult.success ? (
+                <p className="text-green-700 dark:text-green-300 text-sm">
+                  ✓ Terminal started with command: {resumeResult.command}
+                </p>
+              ) : (
+                <p className="text-red-700 dark:text-red-300 text-sm">
+                  ✗ Failed to start terminal: {resumeResult.error}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Convert UI wrapper - only show for non-Claude Code or if user wants to convert */}
+        <div className={isClaudeCode ? 'mt-4' : ''}>
         <div className="mt-4 flex items-center gap-2">
           <select
             value={selectedTarget}
@@ -183,6 +327,7 @@ export function SessionDetail({
             )}
           </div>
         )}
+        </div>
       </div>
 
       {/* Message preview */}
